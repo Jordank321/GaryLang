@@ -12,17 +12,43 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	tokenize(string(fileBytes))
-	tree := treeFromTokens(tokens)
+	tokens := tokenize(string(fileBytes))
+	treeFromTokens(tokens)
 	//assembly := writeToAssembly(tree)
 	//binary := compileAssembly(assembly)
 	//writeExecutable(binary)
 }
 
-func treeFromTokens(tokens *[]token) map[string]functionTree{
-	return map[string]functionTree{
+func treeFromTokens(tokens *[]token) functionCallTree {
+	groups := map[string]*[]token{}
+	currentFuncGroup := []token{}
+	for _, tokenCur := range *tokens {
+		if tokenCur.Type == procedureDefine {
+			if len(currentFuncGroup) > 0 {
+				groups[*currentFuncGroup[1].Value] = &currentFuncGroup
+			}
+			currentFuncGroup := []token{}
+			currentFuncGroup = append(currentFuncGroup, tokenCur)
+			continue
+		} else if len(currentFuncGroup) > 0 {
+			currentFuncGroup = append(currentFuncGroup, tokenCur)
+		}
 
 	}
+
+	definitions := map[string]functionDefinitionTree{}
+	for procName, procTokens := range groups {
+		definitions[procName] = funcTree(procTokens)
+	}
+
+	initFunc := definitions["thisisthepie"]
+	return functionCallTree{
+		definition: &initFunc,
+	}
+}
+
+func funcTree(tokens *[]token) functionDefinitionTree {
+	return functionDefinitionTree{}
 }
 
 func tokenize(input string) *[]token {
@@ -30,7 +56,29 @@ func tokenize(input string) *[]token {
 	lines := strings.Split(strings.Replace(input, "\r\n", "\n", -1), "\n")
 	for _, line := range lines {
 		words := strings.Split(line, " ")
+		var stringTok *token
 		for _, word := range words {
+			if len(word) > 1 {
+				if word[1] == '¬' && word[len(word)-1] != '¬' {
+					stringTok = &token{
+						Type:  stringConst,
+						Value: getAdr(word[2:] + " "),
+					}
+					continue
+				} else if word[1] != '¬' && word[len(word)-1] == '¬' {
+					stringTok.Value = getAdr(*stringTok.Value + word[:len(word)-2])
+					tokens = append(tokens, *stringTok)
+					continue
+				} else if stringTok != nil {
+					stringTok.Value = getAdr(*stringTok.Value + word + " ")
+					continue
+				}
+			}
+			if len(word) == 0 && stringTok != nil {
+				stringTok.Value = getAdr(*stringTok.Value + " ")
+				continue
+			}
+
 			tok := parseWordToToken(strings.TrimSpace(word))
 			tokens = append(tokens, tok)
 		}
@@ -57,7 +105,7 @@ func parseWordToToken(input string) token {
 	case "\\":
 		tok.Type = bodyEnd
 	default:
-		if input[0] == '¬' || input[len(input)-1] == '¬' {
+		if input[1] == '¬' && input[len(input)-1] == '¬' {
 			tok.Type = stringConst
 			tok.Value = getAdr(input[2 : len(input)-2])
 		} else {
@@ -70,14 +118,15 @@ func parseWordToToken(input string) token {
 }
 
 type functionDefinitionTree struct {
-	parameters map[string]string
+	parameters  map[string]string
 	returnTypes map[string]string
-	body []action
+	body        []functionCallTree
 }
 
-type functionCallTree struct{
+type functionCallTree struct {
 	definition *functionDefinitionTree
-	parameters map[string]func
+	evalValue  *string
+	parameters map[string]functionCallTree
 }
 
 type token struct {

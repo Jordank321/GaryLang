@@ -18,7 +18,7 @@ func Test_tokenize(t *testing.T) {
 			"Initial Example",
 			args{
 				`halfleft thisisthepie £ $ /
-	printthething £ ¬Helloworld!¬ $ #
+	printthething £ ¬Hello  world!¬ $ #
 \`,
 			},
 			&[]token{
@@ -47,7 +47,7 @@ func Test_tokenize(t *testing.T) {
 				},
 				token{
 					Type:  stringConst,
-					Value: getAdr("Helloworld!"),
+					Value: getAdr("Hello  world!"),
 				},
 				token{
 					Type: paramClose,
