@@ -51,18 +51,32 @@ func funcTree(tokens *[]token) functionDefinitionTree {
 	tree := functionDefinitionTree{}
 
 	inBody := false
-
-	var paramCur *functionCallTree
-
-	params := map[string]functionCallTree{}
+	inParams := false
 	for _, tokenCur := range *tokens {
-		if paramCur != nil {
-			if tokenCur.Type == name {
-				pa
-			}
-		}
-		if tokenCur.Type == paramOpen && inBody == false && paramCur == nil {
+		if tokenCur.Type == paramOpen && !inBody && !inParams {
 			inParams = true
+			continue
+		}
+		if tokenCur.Type == paramClose && !inBody && inParams {
+			inParams = false
+			continue
+		}
+		if inParams && tokenCur.Type == name {
+			tree.parameters = append(tree.parameters, *tokenCur.Value)
+			continue
+		}
+
+		if tokenCur.Type == bodyStart && !inBody {
+			inBody = true
+			continue
+		}
+		if tokenCur.Type == bodyEnd && inBody {
+			inBody = true
+			continue
+		}
+
+		if inBody && tokenCur.Type == name {
+
 		}
 	}
 
@@ -136,9 +150,9 @@ func parseWordToToken(input string) token {
 }
 
 type functionDefinitionTree struct {
-	parameters  map[string]functionCallTree
-	returnTypes map[string]string
-	body        []functionCallTree
+	parameters    []string
+	body          []functionCallTree
+	assembledBody []string
 }
 
 type functionCallTree struct {
