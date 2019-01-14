@@ -19,7 +19,8 @@ func main() {
 	//writeExecutable(binary)
 }
 
-func getAssemblyBody(string body, externImports []string, builtInAsmFunctions []string) string {
+func getAssemblyBody(body string, externImports []string, builtInAsmFunctions []string, consts map[string][]byte) string {
+	readAsmFile("start64bit")
 	return ""
 }
 

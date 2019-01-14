@@ -22,7 +22,7 @@ section .data use64
 
         align 16 ; Align txt_format data to 16 byte boundary
 
-        ; Parameters:
+; Parameters:
         param1: dq 0xFFFFFFFF
         param2: dq 0xFFFFFFFFFFFFFFFF
         param3: dq 29999.452

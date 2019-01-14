@@ -331,20 +331,124 @@ func Test_cExternsFromAssemblyFiles(t *testing.T) {
 
 func Test_getAssemblyBody(t *testing.T) {
 	type args struct {
-		string              body
+		body                string
 		externImports       []string
 		builtInAsmFunctions []string
+		contants            map[string][]byte
 	}
 	tests := []struct {
 		name string
 		args args
 		want string
 	}{
-		// TODO: Add test cases.
+		{
+			"Simple Example",
+			args{
+				"SOME BODY",
+				[]string{
+					"anImport",
+				},
+				[]string{
+					"thisisbuiltin",
+				},
+				map[string][]byte{
+					"printString": []byte("Something that is forever constant!"),
+				},
+			},
+			`; ---------------------------------------------------------------------------
+; Tell compiler to generate 64 bit code
+; ---------------------------------------------------------------------------
+bits 64
+
+; ---------------------------------------------------------------------------
+; Data segment:
+; ---------------------------------------------------------------------------
+section .data use64
+
+		; Multiline printf format
+		printString: db 10,"Something that is forever constant!"
+
+		align 16 ; Align txt_format data to 16 byte boundary
+
+; ---------------------------------------------------------------------------
+; Code segment:
+; ---------------------------------------------------------------------------
+section .text use64
+
+		; ---------------------------------------------------------------------------
+		; Define macro: Invoke
+		; ---------------------------------------------------------------------------
+		%macro Invoke 1-*
+				%if %0 > 1
+						%rotate 1
+						mov rcx,qword %1
+						%rotate 1
+						%if %0 > 2
+								mov rdx,qword %1
+								%rotate 1
+								%if  %0 > 3
+										mov r8,qword %1
+										%rotate 1
+										%if  %0 > 4
+												mov r9,qword %1
+												%rotate 1
+												%if  %0 > 5
+														%assign max %0-5
+														%assign i 32
+														%rep max
+																mov rax,qword %1
+																mov qword [rsp+i],rax
+																%assign i i+8
+																%rotate 1
+														%endrep
+												%endif
+										%endif
+								%endif
+						%endif
+				%endif
+				; ------------------------
+				; call %1 ; would be the same as this:
+				; -----------------------------------------
+				sub rsp,qword 8
+				mov qword [rsp],%%returnAddress
+				jmp %1
+				%%returnAddress:
+				; -----------------------------------------
+		%endmacro
+
+		; ---------------------------------------------------------------------------
+		; C management
+		; ---------------------------------------------------------------------------
+		global main
+		extern anImport
+	
+main:
+		; -----------------------------------------------------------------------------
+		; Allocate stack memory
+		; -----------------------------------------------------------------------------
+		sub rsp,8*7
+		
+		SOME BODY
+
+		; -----------------------------------------------------------------------------
+		; Release stack memory
+		; -----------------------------------------------------------------------------
+		add rsp,8*7
+
+		; -----------------------------------------------------------------------------
+		; Quit
+		; -----------------------------------------------------------------------------
+		mov rax,qword 0
+		ret
+
+; ----
+; END ----
+; ----`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := getAssemblyBody(tt.args.string, tt.args.externImports, tt.args.builtInAsmFunctions); got != tt.want {
+			if got := getAssemblyBody(tt.args.string, tt.args.externImports, tt.args.builtInAsmFunctions, tt.args.contants); got != tt.want {
 				t.Errorf("getAssemblyBody() = %v, want %v", got, tt.want)
 			}
 		})
