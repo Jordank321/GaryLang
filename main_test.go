@@ -199,3 +199,102 @@ func Test_usedBuiltinFunctions(t *testing.T) {
 		})
 	}
 }
+
+func Test_getAssemblyBodyFromTree(t *testing.T) {
+	type args struct {
+		tree        functionCallTree
+		currentBody string
+	}
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		{
+			"Initial Example",
+			args{
+				tree: functionCallTree{
+					definition: &functionDefinitionTree{
+						body: []functionCallTree{
+							functionCallTree{
+								definition: &functionDefinitionTree{
+									assembledBodyFile: getAdr("printf"),
+									parameters: []string{
+										"printString",
+									},
+								},
+								parameters: map[string]functionCallTree{
+									"printString": functionCallTree{
+										evalValue: []byte("Hello  world!"),
+									},
+								},
+							},
+						},
+					},
+				},
+				currentBody: "",
+			},
+			`; -----------------------------------------------------------------------------
+; Call printf with seven parameters
+; 4x of them are assigned to registers.
+; 3x of them are assigned to stack spaces.
+; -----------------------------------------------------------------------------
+; Call printf with seven parameters
+; -----------------------------------------------------------------------------
+Invoke printf,$printString`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getAssemblyBodyFromTree(tt.args.tree, tt.args.currentBody); got != tt.want {
+				t.Errorf("getAssemblyBodyFromTree() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_getAssemblyConstantsFromTree(t *testing.T) {
+	type args struct {
+		tree functionCallTree
+	}
+	tests := []struct {
+		name string
+		args args
+		want map[string][]byte
+	}{
+		{
+			"Initial Example",
+			args{
+				functionCallTree{
+					definition: &functionDefinitionTree{
+						body: []functionCallTree{
+							functionCallTree{
+								definition: &functionDefinitionTree{
+									assembledBodyFile: getAdr("printf"),
+									parameters: []string{
+										"printString",
+									},
+								},
+								parameters: map[string]functionCallTree{
+									"printString": functionCallTree{
+										evalValue: []byte("Hello  world!"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			map[string][]byte{
+				"printString": []byte("Hello  world!"),
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getAssemblyConstantsFromTree(tt.args.tree); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("getAssemblyConstantsFromTree() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

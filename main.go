@@ -19,6 +19,38 @@ func main() {
 	//writeExecutable(binary)
 }
 
+func getAssemblyConstantsFromTree(tree functionCallTree) map[string][]byte {
+	currentConstants := map[string][]byte{}
+	initBody := tree.definition.body
+	for _, call := range initBody {
+		if call.definition.assembledBodyFile != nil {
+			for _, parm := range call.definition.parameters {
+				currentConstants[parm] = call.parameters[parm].evalValue
+			}
+
+		}
+	}
+	return currentConstants
+}
+
+func getAssemblyBodyFromTree(tree functionCallTree, currentBody string) string {
+	initBody := tree.definition.body
+	for _, call := range initBody {
+		if call.definition.assembledBodyFile != nil {
+			currentBody += readAsmFile(*call.definition.assembledBodyFile)
+		}
+	}
+	return currentBody
+}
+
+func readAsmFile(file string) string {
+	contents, err := ioutil.ReadFile("./windowsAssembly/" + file + ".asm")
+	if err != nil {
+		panic(err)
+	}
+	return strings.Replace(string(contents), "\r\n", "\n", -1)
+}
+
 func usedBuiltinFunctions(tree functionCallTree, used *[]string) *[]string {
 	for _, param := range tree.parameters {
 		usedBuiltinFunctions(param, used)
