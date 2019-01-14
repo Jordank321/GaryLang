@@ -19,6 +19,18 @@ func main() {
 	//writeExecutable(binary)
 }
 
+func getAssemblyBody(string body, externImports []string, builtInAsmFunctions []string) string {
+	return ""
+}
+
+func cExternsFromAssemblyFiles(asmFiles []string) []string {
+	externs := []string{}
+	for _, asmFile := range asmFiles {
+		externs = append(externs, GetStandardFunctionExterns(asmFile)...)
+	}
+	return externs
+}
+
 func getAssemblyConstantsFromTree(tree functionCallTree) map[string][]byte {
 	currentConstants := map[string][]byte{}
 	initBody := tree.definition.body

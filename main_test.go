@@ -298,3 +298,55 @@ func Test_getAssemblyConstantsFromTree(t *testing.T) {
 		})
 	}
 }
+
+func Test_cExternsFromAssemblyFiles(t *testing.T) {
+	type args struct {
+		asmFiles []string
+	}
+	tests := []struct {
+		name string
+		args args
+		want []string
+	}{
+		{
+			"Initial Example",
+			args{
+				[]string{
+					"printf",
+				},
+			},
+			[]string{
+				"printf",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := cExternsFromAssemblyFiles(tt.args.asmFiles); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("cExternsFromAssemblyFiles() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_getAssemblyBody(t *testing.T) {
+	type args struct {
+		string              body
+		externImports       []string
+		builtInAsmFunctions []string
+	}
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getAssemblyBody(tt.args.string, tt.args.externImports, tt.args.builtInAsmFunctions); got != tt.want {
+				t.Errorf("getAssemblyBody() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
