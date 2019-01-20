@@ -1,47 +1,72 @@
 package main
 
 import (
-	"flag"
 	"io/ioutil"
+	"os"
+	"os/exec"
+	"path"
 	"strings"
+
+	"github.com/Jordank321/GaryLang/asmFiles"
 )
 
+//go:generate go run scripts/includeasm.go
+
 func main() {
-	filePath := flag.Arg(0)
+	filePath := os.Args[1]
 	fileBytes, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		panic(err)
 	}
+
 	tokens := tokenize(string(fileBytes))
-	treeFromTokens(tokens)
-	//assembly := writeToAssembly(tree)
-	//binary := compileAssembly(assembly)
-	//writeExecutable(binary)
+	tree := treeFromTokens(tokens)
+	body := getAssemblyBodyFromTree(tree)
+	asmFiles := usedBuiltinFunctions(tree, &[]string{})
+	externs := cExternsFromAssemblyFiles(*asmFiles)
+	consts := getAssemblyConstantsFromTree(tree)
+
+	asmContents := getAssembly(body, externs, *asmFiles, consts)
+
+	dir, name := path.Split(filePath)
+
+	asmPath := dir + strings.Replace(name, ".gry", ".asm", -1)
+	ioutil.WriteFile(asmPath, []byte(asmContents), os.ModeExclusive)
+
+	objPath := dir + strings.Replace(name, ".gry", ".obj", -1)
+	exec.Command("nasm", asmPath, "-fwin64", "-o"+objPath).Run()
+
+	exePath := dir + strings.Replace(name, ".gry", ".exe", -1)
+	exec.Command("gcc", objPath, "-m64", "-o"+exePath).Run()
 }
 
 func getAssembly(body string, externImports []string, builtInAsmFunctions []string, consts map[string][]byte) string {
-	content := readAsmFile("start64bit")
-	content += readAsmFile("datasection")
+	content := asmFiles.Start64bit
+	content += asmFiles.Datasection
 	content += constantsAsAsmString(consts)
-	content += readAsmFile("alignconstbytes")
-	content += readAsmFile("codesection")
-	content += readAsmFile("invoke")
-	content += readAsmFile("c")
+	content += asmFiles.Alignconstbytes
+	content += asmFiles.Codesection
+	content += asmFiles.Invoke
+	content += asmFiles.C
 	for _, extern := range externImports {
 		content += "extern " + extern + "\n"
 	}
 	content += "\nmain:\n"
-	content += readAsmFile("allocatestack")
+	content += asmFiles.Allocatestack
 	content += "\n" + body + "\n"
-	content += readAsmFile("releasestack")
-	content += readAsmFile("exit")
+	content += asmFiles.Releasestack
+	content += asmFiles.Exit
 	return content
 }
 
 func constantsAsAsmString(consts map[string][]byte) string {
 	result := ""
 	for name, bytes := range consts {
-		result += name + ": db \"" + string(bytes) + "\"\n"
+		if bytes[len(bytes)-1] == 0 {
+			result += name + ": db \"" + string(bytes[:len(bytes)-1]) + "\",0\n"
+		} else {
+			result += name + ": db \"" + string(bytes) + "\"\n"
+		}
 	}
 	return result
 }
@@ -68,23 +93,24 @@ func getAssemblyConstantsFromTree(tree functionCallTree) map[string][]byte {
 	return currentConstants
 }
 
-func getAssemblyBodyFromTree(tree functionCallTree, currentBody string) string {
+func getAssemblyBodyFromTree(tree functionCallTree) string {
+	currentBody := ""
 	initBody := tree.definition.body
 	for _, call := range initBody {
 		if call.definition.assembledBodyFile != nil {
-			currentBody += readAsmFile(*call.definition.assembledBodyFile)
+			currentBody += *call.definition.assembledBodyFile
 		}
 	}
 	return currentBody
 }
 
-func readAsmFile(file string) string {
-	contents, err := ioutil.ReadFile("./windowsAssembly/" + file + ".asm")
-	if err != nil {
-		panic(err)
-	}
-	return strings.Replace(string(contents), "\r\n", "\n", -1)
-}
+// func readAsmFile(file string) string {
+// 	contents, err := ioutil.ReadFile("./windowsAssembly/" + file + ".asm")
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	return strings.Replace(string(contents), "\r\n", "\n", -1)
+// }
 
 func usedBuiltinFunctions(tree functionCallTree, used *[]string) *[]string {
 	for _, param := range tree.parameters {
@@ -93,7 +119,7 @@ func usedBuiltinFunctions(tree functionCallTree, used *[]string) *[]string {
 	if tree.definition == nil {
 		return used
 	}
-	asmFile := tree.definition.assembledBodyFile
+	asmFile := tree.definition.assembledBodyName
 	if asmFile != nil {
 		newUsed := appendIfMissing(*used, *asmFile)
 		*used = newUsed
@@ -178,7 +204,7 @@ func funcTree(tokens *[]token) functionDefinitionTree {
 		if inBody && inParams && tokenCur.Type == stringConst {
 			paramName := callCur.definition.parameters[callCurParamNumber]
 			callCurParamNumber++
-			callCur.parameters[paramName] = functionCallTree{evalValue: []byte(*tokenCur.Value)}
+			callCur.parameters[paramName] = functionCallTree{evalValue: append([]byte(*tokenCur.Value), 0)}
 		}
 		if tokenCur.Type == paramClose && inBody && inParams {
 			inParams = false
@@ -261,6 +287,7 @@ func parseWordToToken(input string) token {
 type functionDefinitionTree struct {
 	parameters        []string
 	body              []functionCallTree
+	assembledBodyName *string
 	assembledBodyFile *string
 }
 

@@ -3,7 +3,10 @@ package main
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/Jordank321/GaryLang/asmFiles"
 )
 
 func Test_tokenize(t *testing.T) {
@@ -127,14 +130,15 @@ func Test_treeFromTokens(t *testing.T) {
 					body: []functionCallTree{
 						functionCallTree{
 							definition: &functionDefinitionTree{
-								assembledBodyFile: getAdr("printf"),
+								assembledBodyName: getAdr("printf"),
+								assembledBodyFile: getAdr(asmFiles.Printf),
 								parameters: []string{
 									"printString",
 								},
 							},
 							parameters: map[string]functionCallTree{
 								"printString": functionCallTree{
-									evalValue: []byte("Hello  world!"),
+									evalValue: append([]byte("Hello  world!"), 0),
 								},
 							},
 						},
@@ -171,7 +175,8 @@ func Test_usedBuiltinFunctions(t *testing.T) {
 						body: []functionCallTree{
 							functionCallTree{
 								definition: &functionDefinitionTree{
-									assembledBodyFile: getAdr("printf"),
+									assembledBodyName: getAdr("printf"),
+									assembledBodyFile: getAdr(asmFiles.Printf),
 									parameters: []string{
 										"printString",
 									},
@@ -203,8 +208,7 @@ func Test_usedBuiltinFunctions(t *testing.T) {
 
 func Test_getAssemblyBodyFromTree(t *testing.T) {
 	type args struct {
-		tree        functionCallTree
-		currentBody string
+		tree functionCallTree
 	}
 	tests := []struct {
 		name string
@@ -219,7 +223,8 @@ func Test_getAssemblyBodyFromTree(t *testing.T) {
 						body: []functionCallTree{
 							functionCallTree{
 								definition: &functionDefinitionTree{
-									assembledBodyFile: getAdr("printf"),
+									assembledBodyName: getAdr("printf"),
+									assembledBodyFile: getAdr(asmFiles.Printf),
 									parameters: []string{
 										"printString",
 									},
@@ -233,7 +238,6 @@ func Test_getAssemblyBodyFromTree(t *testing.T) {
 						},
 					},
 				},
-				currentBody: "",
 			},
 			`; -----------------------------------------------------------------------------
 ; Call printf with seven parameters
@@ -242,12 +246,14 @@ func Test_getAssemblyBodyFromTree(t *testing.T) {
 ; -----------------------------------------------------------------------------
 ; Call printf with seven parameters
 ; -----------------------------------------------------------------------------
-Invoke printf,$printString`,
+Invoke printf,$printString
+`,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := getAssemblyBodyFromTree(tt.args.tree, tt.args.currentBody); got != tt.want {
+			if got := getAssemblyBodyFromTree(tt.args.tree); got != tt.want {
+				fmt.Println(got)
 				t.Errorf("getAssemblyBodyFromTree() = %v, want %v", got, tt.want)
 			}
 		})
@@ -278,7 +284,7 @@ func Test_getAssemblyConstantsFromTree(t *testing.T) {
 								},
 								parameters: map[string]functionCallTree{
 									"printString": functionCallTree{
-										evalValue: []byte("Hello  world!"),
+										evalValue: append([]byte("Hello  world!"), 0),
 									},
 								},
 							},
@@ -287,7 +293,7 @@ func Test_getAssemblyConstantsFromTree(t *testing.T) {
 				},
 			},
 			map[string][]byte{
-				"printString": []byte("Hello  world!"),
+				"printString": append([]byte("Hello  world!"), 0),
 			},
 		},
 	}
@@ -345,15 +351,23 @@ func Test_getAssemblyBody(t *testing.T) {
 		{
 			"Simple Example",
 			args{
-				"SOME BODY\n",
+				`; -----------------------------------------------------------------------------
+; Call printf with seven parameters
+; 4x of them are assigned to registers.
+; 3x of them are assigned to stack spaces.
+; -----------------------------------------------------------------------------
+; Call printf with seven parameters
+; -----------------------------------------------------------------------------
+Invoke printf,$printString
+`,
 				[]string{
-					"anImport",
+					"printf",
 				},
 				[]string{
 					"thisisbuiltin",
 				},
 				map[string][]byte{
-					"printString": []byte("Something that is forever constant!"),
+					"printString": append([]byte("Something that is forever constant!"), 0),
 				},
 			},
 			`; ---------------------------------------------------------------------------
@@ -364,7 +378,7 @@ bits 64
 ; Data segment:
 ; ---------------------------------------------------------------------------
 section .data use64
-printString: db "Something that is forever constant!"
+printString: db "Something that is forever constant!",0
 align 16 ; align data constants to the 16 byte boundary
 ; ---------------------------------------------------------------------------
 ; Code segment:
@@ -374,47 +388,47 @@ section .text use64
 ; Define macro: Invoke
 ; ---------------------------------------------------------------------------
 %macro Invoke 1-*
-	%if %0 > 1
-			%rotate 1
-			mov rcx,qword %1
-			%rotate 1
-			%if %0 > 2
-					mov rdx,qword %1
-					%rotate 1
-					%if  %0 > 3
-							mov r8,qword %1
-							%rotate 1
-							%if  %0 > 4
-									mov r9,qword %1
-									%rotate 1
-									%if  %0 > 5
-											%assign max %0-5
-											%assign i 32
-											%rep max
-													mov rax,qword %1
-													mov qword [rsp+i],rax
-													%assign i i+8
-													%rotate 1
-											%endrep
-									%endif
-							%endif
-					%endif
-			%endif
-	%endif
-	; ------------------------
-	; call %1 ; would be the same as this:
-	; -----------------------------------------
-	sub rsp,qword 8
-	mov qword [rsp],%%returnAddress
-	jmp %1
-	%%returnAddress:
-	; -----------------------------------------
+        %if %0 > 1
+                %rotate 1
+                mov rcx,qword %1
+                %rotate 1
+                %if %0 > 2
+                        mov rdx,qword %1
+                        %rotate 1
+                        %if  %0 > 3
+                                mov r8,qword %1
+                                %rotate 1
+                                %if  %0 > 4
+                                        mov r9,qword %1
+                                        %rotate 1
+                                        %if  %0 > 5
+                                                %assign max %0-5
+                                                %assign i 32
+                                                %rep max
+                                                        mov rax,qword %1
+                                                        mov qword [rsp+i],rax
+                                                        %assign i i+8
+                                                        %rotate 1
+                                                %endrep
+                                        %endif
+                                %endif
+                        %endif
+                %endif
+        %endif
+        ; ------------------------
+        ; call %1 ; would be the same as this:
+        ; -----------------------------------------
+        sub rsp,qword 8
+        mov qword [rsp],%%returnAddress
+        jmp %1
+        %%returnAddress:
+        ; -----------------------------------------
 %endmacro
 ; ---------------------------------------------------------------------------
 ; C management
 ; ---------------------------------------------------------------------------
 global main
-extern anImport
+extern printf
 
 main:
 ; -----------------------------------------------------------------------------
@@ -422,7 +436,14 @@ main:
 ; -----------------------------------------------------------------------------
 sub rsp,8*7
 
-SOME BODY
+; -----------------------------------------------------------------------------
+; Call printf with seven parameters
+; 4x of them are assigned to registers.
+; 3x of them are assigned to stack spaces.
+; -----------------------------------------------------------------------------
+; Call printf with seven parameters
+; -----------------------------------------------------------------------------
+Invoke printf,$printString
 
 ; -----------------------------------------------------------------------------
 ; Release stack memory
@@ -436,13 +457,27 @@ ret
 
 ; ----
 ; END ----
-; ----`,
+; ----
+`,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := getAssembly(tt.args.body, tt.args.externImports, tt.args.builtInAsmFunctions, tt.args.contants); got != tt.want {
-				fmt.Println(got)
+				gotLines := strings.Split(got, "\n")
+				wantLines := strings.Split(tt.want, "\n")
+				if len(gotLines) != len(wantLines) {
+					t.Error("Expected the same number of lines")
+					return
+				}
+				for i := 0; i < len(gotLines); i++ {
+					gotLine := gotLines[i]
+					wantLine := wantLines[i]
+					if gotLine != wantLine {
+						t.Errorf("\n%v\nwant\n%v", gotLine, wantLine)
+						return
+					}
+				}
 				t.Errorf("getAssemblyBody() = %v, want %v", got, tt.want)
 			}
 		})

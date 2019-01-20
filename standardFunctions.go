@@ -1,5 +1,9 @@
 package main
 
+import (
+	"github.com/Jordank321/GaryLang/asmFiles"
+)
+
 var standardFunctions map[string]functionDefinitionTree
 var externDependencies map[string][]string
 var setup bool = false
@@ -21,7 +25,8 @@ func setupStandardFunctions() {
 	standardFunctions = map[string]functionDefinitionTree{
 		"printthething": functionDefinitionTree{
 			parameters:        []string{"printString"},
-			assembledBodyFile: getAdr("printf"),
+			assembledBodyName: getAdr("printf"),
+			assembledBodyFile: getAdr(asmFiles.Printf),
 		},
 	}
 	externDependencies = map[string][]string{
