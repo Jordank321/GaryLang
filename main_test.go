@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 )
@@ -344,7 +345,7 @@ func Test_getAssemblyBody(t *testing.T) {
 		{
 			"Simple Example",
 			args{
-				"SOME BODY",
+				"SOME BODY\n",
 				[]string{
 					"anImport",
 				},
@@ -359,87 +360,79 @@ func Test_getAssemblyBody(t *testing.T) {
 ; Tell compiler to generate 64 bit code
 ; ---------------------------------------------------------------------------
 bits 64
-
 ; ---------------------------------------------------------------------------
 ; Data segment:
 ; ---------------------------------------------------------------------------
 section .data use64
-
-		; Multiline printf format
-		printString: db 10,"Something that is forever constant!"
-
-		align 16 ; Align txt_format data to 16 byte boundary
-
+printString: db "Something that is forever constant!"
+align 16 ; align data constants to the 16 byte boundary
 ; ---------------------------------------------------------------------------
 ; Code segment:
 ; ---------------------------------------------------------------------------
 section .text use64
+; ---------------------------------------------------------------------------
+; Define macro: Invoke
+; ---------------------------------------------------------------------------
+%macro Invoke 1-*
+	%if %0 > 1
+			%rotate 1
+			mov rcx,qword %1
+			%rotate 1
+			%if %0 > 2
+					mov rdx,qword %1
+					%rotate 1
+					%if  %0 > 3
+							mov r8,qword %1
+							%rotate 1
+							%if  %0 > 4
+									mov r9,qword %1
+									%rotate 1
+									%if  %0 > 5
+											%assign max %0-5
+											%assign i 32
+											%rep max
+													mov rax,qword %1
+													mov qword [rsp+i],rax
+													%assign i i+8
+													%rotate 1
+											%endrep
+									%endif
+							%endif
+					%endif
+			%endif
+	%endif
+	; ------------------------
+	; call %1 ; would be the same as this:
+	; -----------------------------------------
+	sub rsp,qword 8
+	mov qword [rsp],%%returnAddress
+	jmp %1
+	%%returnAddress:
+	; -----------------------------------------
+%endmacro
+; ---------------------------------------------------------------------------
+; C management
+; ---------------------------------------------------------------------------
+global main
+extern anImport
 
-		; ---------------------------------------------------------------------------
-		; Define macro: Invoke
-		; ---------------------------------------------------------------------------
-		%macro Invoke 1-*
-				%if %0 > 1
-						%rotate 1
-						mov rcx,qword %1
-						%rotate 1
-						%if %0 > 2
-								mov rdx,qword %1
-								%rotate 1
-								%if  %0 > 3
-										mov r8,qword %1
-										%rotate 1
-										%if  %0 > 4
-												mov r9,qword %1
-												%rotate 1
-												%if  %0 > 5
-														%assign max %0-5
-														%assign i 32
-														%rep max
-																mov rax,qword %1
-																mov qword [rsp+i],rax
-																%assign i i+8
-																%rotate 1
-														%endrep
-												%endif
-										%endif
-								%endif
-						%endif
-				%endif
-				; ------------------------
-				; call %1 ; would be the same as this:
-				; -----------------------------------------
-				sub rsp,qword 8
-				mov qword [rsp],%%returnAddress
-				jmp %1
-				%%returnAddress:
-				; -----------------------------------------
-		%endmacro
-
-		; ---------------------------------------------------------------------------
-		; C management
-		; ---------------------------------------------------------------------------
-		global main
-		extern anImport
-	
 main:
-		; -----------------------------------------------------------------------------
-		; Allocate stack memory
-		; -----------------------------------------------------------------------------
-		sub rsp,8*7
-		
-		SOME BODY
+; -----------------------------------------------------------------------------
+; Allocate stack memory
+; -----------------------------------------------------------------------------
+sub rsp,8*7
 
-		; -----------------------------------------------------------------------------
-		; Release stack memory
-		; -----------------------------------------------------------------------------
-		add rsp,8*7
+SOME BODY
 
-		; -----------------------------------------------------------------------------
-		; Quit
-		; -----------------------------------------------------------------------------
-		mov rax,qword 0
-		ret
+; -----------------------------------------------------------------------------
+; Release stack memory
+; -----------------------------------------------------------------------------
+add rsp,8*7
+; -----------------------------------------------------------------------------
+; Quit
+; -----------------------------------------------------------------------------
+mov rax,qword 0
+ret
 
 ; ----
 ; END ----
@@ -448,7 +441,8 @@ main:
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := getAssemblyBody(tt.args.string, tt.args.externImports, tt.args.builtInAsmFunctions, tt.args.contants); got != tt.want {
+			if got := getAssembly(tt.args.body, tt.args.externImports, tt.args.builtInAsmFunctions, tt.args.contants); got != tt.want {
+				fmt.Println(got)
 				t.Errorf("getAssemblyBody() = %v, want %v", got, tt.want)
 			}
 		})

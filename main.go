@@ -19,9 +19,31 @@ func main() {
 	//writeExecutable(binary)
 }
 
-func getAssemblyBody(body string, externImports []string, builtInAsmFunctions []string, consts map[string][]byte) string {
-	readAsmFile("start64bit")
-	return ""
+func getAssembly(body string, externImports []string, builtInAsmFunctions []string, consts map[string][]byte) string {
+	content := readAsmFile("start64bit")
+	content += readAsmFile("datasection")
+	content += constantsAsAsmString(consts)
+	content += readAsmFile("alignconstbytes")
+	content += readAsmFile("codesection")
+	content += readAsmFile("invoke")
+	content += readAsmFile("c")
+	for _, extern := range externImports {
+		content += "extern " + extern + "\n"
+	}
+	content += "\nmain:\n"
+	content += readAsmFile("allocatestack")
+	content += "\n" + body + "\n"
+	content += readAsmFile("releasestack")
+	content += readAsmFile("exit")
+	return content
+}
+
+func constantsAsAsmString(consts map[string][]byte) string {
+	result := ""
+	for name, bytes := range consts {
+		result += name + ": db \"" + string(bytes) + "\"\n"
+	}
+	return result
 }
 
 func cExternsFromAssemblyFiles(asmFiles []string) []string {
