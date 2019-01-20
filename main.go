@@ -5,12 +5,15 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strconv"
 	"strings"
 
 	"github.com/Jordank321/GaryLang/asmFiles"
 )
 
 //go:generate go run scripts/includeasm.go
+
+var nextParamNumber = 0
 
 func main() {
 	filePath := os.Args[1]
@@ -85,9 +88,9 @@ func getAssemblyConstantsFromTree(tree functionCallTree) map[string][]byte {
 	for _, call := range initBody {
 		if call.definition.assembledBodyFile != nil {
 			for _, parm := range call.definition.parameters {
-				currentConstants[parm] = call.parameters[parm].evalValue
+				constName := call.paramConstNames[parm]
+				currentConstants[constName] = call.parameters[parm].evalValue
 			}
-
 		}
 	}
 	return currentConstants
@@ -98,7 +101,11 @@ func getAssemblyBodyFromTree(tree functionCallTree) string {
 	initBody := tree.definition.body
 	for _, call := range initBody {
 		if call.definition.assembledBodyFile != nil {
-			currentBody += *call.definition.assembledBodyFile
+			assembly := *call.definition.assembledBodyFile
+			for paramName, constName := range call.paramConstNames {
+				assembly = strings.Replace(assembly, "$"+paramName, "$"+constName, -1)
+			}
+			currentBody += assembly
 		}
 	}
 	return currentBody
@@ -193,8 +200,9 @@ func funcTree(tokens *[]token) functionDefinitionTree {
 		if inBody && !inParams && tokenCur.Type == name {
 			def := standardFunctions[*tokenCur.Value]
 			callCur = &functionCallTree{
-				definition: &def,
-				parameters: make(map[string]functionCallTree),
+				definition:      &def,
+				parameters:      make(map[string]functionCallTree),
+				paramConstNames: make(map[string]string),
 			}
 		}
 		if tokenCur.Type == paramOpen && inBody && !inParams {
@@ -205,6 +213,8 @@ func funcTree(tokens *[]token) functionDefinitionTree {
 			paramName := callCur.definition.parameters[callCurParamNumber]
 			callCurParamNumber++
 			callCur.parameters[paramName] = functionCallTree{evalValue: append([]byte(*tokenCur.Value), 0)}
+			callCur.paramConstNames[paramName] = "p" + strconv.Itoa(nextParamNumber)
+			nextParamNumber++
 		}
 		if tokenCur.Type == paramClose && inBody && inParams {
 			inParams = false
@@ -292,9 +302,10 @@ type functionDefinitionTree struct {
 }
 
 type functionCallTree struct {
-	definition *functionDefinitionTree
-	evalValue  []byte
-	parameters map[string]functionCallTree
+	definition      *functionDefinitionTree
+	evalValue       []byte
+	parameters      map[string]functionCallTree
+	paramConstNames map[string]string
 }
 
 type token struct {

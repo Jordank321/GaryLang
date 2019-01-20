@@ -6,22 +6,21 @@ import (
 
 var standardFunctions map[string]functionDefinitionTree
 var externDependencies map[string][]string
-var setup bool = false
+var setup bool
 
 func GetStandardFunction(function string) functionDefinitionTree {
-	if !setup {
-		setupStandardFunctions()
-	}
+	setupStandardFunctions()
 	return standardFunctions[function]
 }
 func GetStandardFunctionExterns(function string) []string {
-	if !setup {
-		setupStandardFunctions()
-	}
+	setupStandardFunctions()
 	return externDependencies[function]
 }
 
 func setupStandardFunctions() {
+	if setup {
+		return
+	}
 	standardFunctions = map[string]functionDefinitionTree{
 		"printthething": functionDefinitionTree{
 			parameters:        []string{"printString"},

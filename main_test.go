@@ -141,6 +141,9 @@ func Test_treeFromTokens(t *testing.T) {
 									evalValue: append([]byte("Hello  world!"), 0),
 								},
 							},
+							paramConstNames: map[string]string{
+								"printString": "p0",
+							},
 						},
 					},
 				},
@@ -185,6 +188,9 @@ func Test_usedBuiltinFunctions(t *testing.T) {
 									"printString": functionCallTree{
 										evalValue: []byte("Hello  world!"),
 									},
+								},
+								paramConstNames: map[string]string{
+									"printString": "p0",
 								},
 							},
 						},
@@ -234,6 +240,9 @@ func Test_getAssemblyBodyFromTree(t *testing.T) {
 										evalValue: []byte("Hello  world!"),
 									},
 								},
+								paramConstNames: map[string]string{
+									"printString": "p0",
+								},
 							},
 						},
 					},
@@ -246,7 +255,7 @@ func Test_getAssemblyBodyFromTree(t *testing.T) {
 ; -----------------------------------------------------------------------------
 ; Call printf with seven parameters
 ; -----------------------------------------------------------------------------
-Invoke printf,$printString
+Invoke printf,$p0
 `,
 		},
 	}
@@ -287,13 +296,16 @@ func Test_getAssemblyConstantsFromTree(t *testing.T) {
 										evalValue: append([]byte("Hello  world!"), 0),
 									},
 								},
+								paramConstNames: map[string]string{
+									"printString": "p0",
+								},
 							},
 						},
 					},
 				},
 			},
 			map[string][]byte{
-				"printString": append([]byte("Hello  world!"), 0),
+				"p0": append([]byte("Hello  world!"), 0),
 			},
 		},
 	}
