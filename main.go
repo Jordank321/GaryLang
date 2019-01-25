@@ -37,10 +37,18 @@ func main() {
 	ioutil.WriteFile(asmPath, []byte(asmContents), os.ModeExclusive)
 
 	objPath := dir + strings.Replace(name, ".gry", ".obj", -1)
-	exec.Command("nasm", asmPath, "-fwin64", "-o"+objPath).Run()
+	out, err := exec.Command("nasm", asmPath, "-fwin64", "-o"+objPath).Output()
+	println(string(out))
+	if err != nil {
+		panic(err)
+	}
 
 	exePath := dir + strings.Replace(name, ".gry", ".exe", -1)
-	exec.Command("gcc", objPath, "-m64", "-o"+exePath).Run()
+	out, err = exec.Command("gcc", objPath, "-m64", "-o"+exePath).Output()
+	println(string(out))
+	if err != nil {
+		panic(err)
+	}
 }
 
 func getAssembly(body string, externImports []string, builtInAsmFunctions []string, consts map[string][]byte) string {
@@ -82,27 +90,27 @@ func cExternsFromAssemblyFiles(asmFiles []string) []string {
 	return externs
 }
 
-func getAssemblyConstantsFromTree(tree functionCallTree) map[string][]byte {
+func getAssemblyConstantsFromTree(tree FunctionCallTree) map[string][]byte {
 	currentConstants := map[string][]byte{}
-	initBody := tree.definition.body
+	initBody := tree.Definition.Body
 	for _, call := range initBody {
-		if call.definition.assembledBodyFile != nil {
-			for _, parm := range call.definition.parameters {
-				constName := call.paramConstNames[parm]
-				currentConstants[constName] = call.parameters[parm].evalValue
+		if call.Definition.AssembledBodyFile != nil {
+			for _, parm := range call.Definition.Parameters {
+				constName := call.ParamConstNames[parm]
+				currentConstants[constName] = call.Parameters[parm].EvalValue
 			}
 		}
 	}
 	return currentConstants
 }
 
-func getAssemblyBodyFromTree(tree functionCallTree) string {
+func getAssemblyBodyFromTree(tree FunctionCallTree) string {
 	currentBody := ""
-	initBody := tree.definition.body
+	initBody := tree.Definition.Body
 	for _, call := range initBody {
-		if call.definition.assembledBodyFile != nil {
-			assembly := *call.definition.assembledBodyFile
-			for paramName, constName := range call.paramConstNames {
+		if call.Definition.AssembledBodyFile != nil {
+			assembly := *call.Definition.AssembledBodyFile
+			for paramName, constName := range call.ParamConstNames {
 				assembly = strings.Replace(assembly, "$"+paramName, "$"+constName, -1)
 			}
 			currentBody += assembly
@@ -119,34 +127,34 @@ func getAssemblyBodyFromTree(tree functionCallTree) string {
 // 	return strings.Replace(string(contents), "\r\n", "\n", -1)
 // }
 
-func usedBuiltinFunctions(tree functionCallTree, used *[]string) *[]string {
-	for _, param := range tree.parameters {
+func usedBuiltinFunctions(tree FunctionCallTree, used *[]string) *[]string {
+	for _, param := range tree.Parameters {
 		usedBuiltinFunctions(param, used)
 	}
-	if tree.definition == nil {
+	if tree.Definition == nil {
 		return used
 	}
-	asmFile := tree.definition.assembledBodyName
+	asmFile := tree.Definition.AssembledBodyName
 	if asmFile != nil {
 		newUsed := appendIfMissing(*used, *asmFile)
 		*used = newUsed
 	}
 
-	for _, call := range (*tree.definition).body {
+	for _, call := range (*tree.Definition).Body {
 		usedBuiltinFunctions(call, used)
 	}
 	return used
 }
 
-func treeFromTokens(tokens *[]token) functionCallTree {
-	groups := map[string]*[]token{}
-	var currentFuncGroup []token
+func treeFromTokens(tokens *[]Token) FunctionCallTree {
+	groups := map[string]*[]Token{}
+	var currentFuncGroup []Token
 	for _, tokenCur := range *tokens {
-		if tokenCur.Type == procedureDefine {
+		if tokenCur.Type == ProcedureDefine {
 			if len(currentFuncGroup) > 0 {
 				groups[*currentFuncGroup[1].Value] = &currentFuncGroup
 			}
-			currentFuncGroup = []token{tokenCur}
+			currentFuncGroup = []Token{tokenCur}
 			continue
 		} else if len(currentFuncGroup) > 0 {
 			currentFuncGroup = append(currentFuncGroup, tokenCur)
@@ -154,73 +162,117 @@ func treeFromTokens(tokens *[]token) functionCallTree {
 	}
 	groups[*currentFuncGroup[1].Value] = &currentFuncGroup
 
-	definitions := map[string]functionDefinitionTree{}
+	definitions := map[string]FunctionDefinitionTree{}
 	for procName, procTokens := range groups {
 		definitions[procName] = funcTree(procTokens)
 	}
 
 	initFunc := definitions["thisisthepie"]
-	return functionCallTree{
-		definition: &initFunc,
+	return FunctionCallTree{
+		Definition: &initFunc,
 	}
 }
 
-func funcTree(tokens *[]token) functionDefinitionTree {
+func funcTree(tokens *[]Token) FunctionDefinitionTree {
 	setupStandardFunctions()
-	tree := functionDefinitionTree{}
+	tree := FunctionDefinitionTree{}
 
 	inBody := false
 	inParams := false
-	var callCur *functionCallTree
+	var leftHandSide *string
+	var rightHandSide *string
+	var callCur *FunctionCallTree
 	callCurParamNumber := 0
 
+	assignParam := func(param string) {
+		callCur.ParamConstNames[param] = "p" + strconv.Itoa(nextParamNumber)
+		nextParamNumber++
+	}
+
 	for _, tokenCur := range *tokens {
-		if tokenCur.Type == paramOpen && !inBody && !inParams {
+		if tokenCur.Type == ParamOpen && !inBody && !inParams {
 			inParams = true
 			continue
 		}
-		if tokenCur.Type == paramClose && !inBody && inParams {
+		if tokenCur.Type == ParamClose && !inBody && inParams {
 			inParams = false
 			continue
 		}
-		if inParams && tokenCur.Type == name {
-			tree.parameters = append(tree.parameters, *tokenCur.Value)
+		if inParams && tokenCur.Type == Name {
+			tree.Parameters = append(tree.Parameters, *tokenCur.Value)
 			continue
 		}
 
-		if tokenCur.Type == bodyStart && !inBody {
+		if tokenCur.Type == BodyStart && !inBody {
 			inBody = true
 			continue
 		}
-		if tokenCur.Type == bodyEnd && inBody {
+		if tokenCur.Type == BodyEnd && inBody {
 			inBody = true
 			continue
 		}
 
-		if inBody && !inParams && tokenCur.Type == name {
+		if inBody && !inParams && tokenCur.Type == Name {
 			def := standardFunctions[*tokenCur.Value]
-			callCur = &functionCallTree{
-				definition:      &def,
-				parameters:      make(map[string]functionCallTree),
-				paramConstNames: make(map[string]string),
+			if def == nil {
+				if leftHandSide == nil {
+					leftHandSide = tokenCur.Value
+				} else {
+					rightHandSide = tokenCur.Value
+				}
+			} else {
+				callCur = &FunctionCallTree{
+					Definition:      def,
+					Parameters:      map[string]FunctionCallTree{},
+					ParamConstNames: map[string]string{},
+				}
 			}
 		}
-		if tokenCur.Type == paramOpen && inBody && !inParams {
+		if inBody && !inParams && tokenCur.Type == Assign {
+			def := GetStandardFunction("assign")
+			callCur = &FunctionCallTree{
+				Definition:      def,
+				Parameters:      map[string]FunctionCallTree{},
+				ParamConstNames: map[string]string{},
+			}
+		}
+		if inBody && !inParams && tokenCur.Type == Number && leftHandSide != nil {
+			rightHandSide = tokenCur.Value
+		}
+		if inBody && !inParams && tokenCur.Type == StringConst && leftHandSide != nil {
+			rightHandSide = tokenCur.Value
+		}
+		if tokenCur.Type == ParamOpen && inBody && !inParams {
 			inParams = true
 			continue
 		}
-		if inBody && inParams && tokenCur.Type == stringConst {
-			paramName := callCur.definition.parameters[callCurParamNumber]
+		if inBody && inParams && tokenCur.Type == StringConst {
+			paramName := callCur.Definition.Parameters[callCurParamNumber]
 			callCurParamNumber++
-			callCur.parameters[paramName] = functionCallTree{evalValue: append([]byte(*tokenCur.Value), 0)}
-			callCur.paramConstNames[paramName] = "p" + strconv.Itoa(nextParamNumber)
-			nextParamNumber++
+			callCur.Parameters[paramName] = FunctionCallTree{EvalValue: append([]byte(*tokenCur.Value), 0)}
+			assignParam(paramName)
 		}
-		if tokenCur.Type == paramClose && inBody && inParams {
+		if tokenCur.Type == ParamClose && inBody && inParams {
 			inParams = false
-			tree.body = append(tree.body, *callCur)
+			tree.Body = append(tree.Body, *callCur)
 			callCur = nil
 			callCurParamNumber = 0
+			continue
+		}
+
+		if leftHandSide != nil && callCur != nil && rightHandSide != nil {
+			lhsName := callCur.Definition.Parameters[0]
+			rhsName := callCur.Definition.Parameters[1]
+			callCur.Parameters[lhsName] = FunctionCallTree{EvalValue: []byte{0}}
+			assignParam(lhsName)
+			callCur.Parameters[rhsName] = FunctionCallTree{EvalValue: []byte(*rightHandSide)}
+			assignParam(rhsName)
+			callCur.Parameters["valLength"] = FunctionCallTree{EvalValue: []byte{byte(len(*rightHandSide))}}
+			assignParam("valLength")
+			tree.Body = append(tree.Body, *callCur)
+			callCur = nil
+			leftHandSide = nil
+			rightHandSide = nil
 			continue
 		}
 	}
@@ -228,17 +280,17 @@ func funcTree(tokens *[]token) functionDefinitionTree {
 	return tree
 }
 
-func tokenize(input string) *[]token {
-	tokens := []token{}
+func tokenize(input string) *[]Token {
+	tokens := []Token{}
 	lines := strings.Split(strings.Replace(input, "\r\n", "\n", -1), "\n")
 	for _, line := range lines {
 		words := strings.Split(line, " ")
-		var stringTok *token
+		var stringTok *Token
 		for _, word := range words {
 			if len(word) > 1 {
 				if word[1] == '¬' && word[len(word)-1] != '¬' {
-					stringTok = &token{
-						Type:  stringConst,
+					stringTok = &Token{
+						Type:  StringConst,
 						Value: getAdr(word[2:] + " "),
 					}
 					continue
@@ -263,30 +315,35 @@ func tokenize(input string) *[]token {
 	return &tokens
 }
 
-func parseWordToToken(input string) token {
-	tok := token{}
+func parseWordToToken(input string) Token {
+	tok := Token{}
 
 	switch input {
 	case "halfleft":
-		tok.Type = procedureDefine
+		tok.Type = ProcedureDefine
 	case "alien":
-		tok.Type = moduleImport
+		tok.Type = ModuleImport
 	case "£":
-		tok.Type = paramOpen
+		tok.Type = ParamOpen
 	case "$":
-		tok.Type = paramClose
+		tok.Type = ParamClose
 	case "#":
-		tok.Type = endLine
+		tok.Type = EndLine
 	case "/":
-		tok.Type = bodyStart
+		tok.Type = BodyStart
 	case "\\":
-		tok.Type = bodyEnd
+		tok.Type = BodyEnd
+	case "=":
+		tok.Type = Assign
 	default:
-		if input[1] == '¬' && input[len(input)-1] == '¬' {
-			tok.Type = stringConst
+		if len(input) >= 2 && input[1] == '¬' && input[len(input)-1] == '¬' {
+			tok.Type = StringConst
 			tok.Value = getAdr(input[2 : len(input)-2])
+		} else if _, err := strconv.Atoi(input); err == nil {
+			tok.Type = Number
+			tok.Value = getAdr(input)
 		} else {
-			tok.Type = name
+			tok.Type = Name
 			tok.Value = getAdr(input)
 		}
 	}
@@ -294,38 +351,40 @@ func parseWordToToken(input string) token {
 	return tok
 }
 
-type functionDefinitionTree struct {
-	parameters        []string
-	body              []functionCallTree
-	assembledBodyName *string
-	assembledBodyFile *string
+type FunctionDefinitionTree struct {
+	Parameters        []string
+	Body              []FunctionCallTree
+	AssembledBodyName *string
+	AssembledBodyFile *string
 }
 
-type functionCallTree struct {
-	definition      *functionDefinitionTree
-	evalValue       []byte
-	parameters      map[string]functionCallTree
-	paramConstNames map[string]string
+type FunctionCallTree struct {
+	Definition      *FunctionDefinitionTree
+	EvalValue       []byte
+	Parameters      map[string]FunctionCallTree
+	ParamConstNames map[string]string
 }
 
-type token struct {
-	Type  tokeType
+type Token struct {
+	Type  TokeType
 	Value *string
 }
 
-type tokeType int
+type TokeType int
 
 const (
-	moduleImport tokeType = iota
-	procedureDefine
-	name
-	paramOpen
-	paramClose
-	endLine
-	bodyStart
-	bodyEnd
-	stringConst
-	eof
+	ModuleImport TokeType = iota
+	ProcedureDefine
+	Name
+	ParamOpen
+	ParamClose
+	EndLine
+	BodyStart
+	BodyEnd
+	StringConst
+	Assign
+	Number
+	EOF
 )
 
 func getAdr(input string) *string {

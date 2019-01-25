@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -16,51 +17,66 @@ func Test_tokenize(t *testing.T) {
 	tests := []struct {
 		name string
 		args args
-		want *[]token
+		want *[]Token
 	}{
 		{
 			"Initial Example",
 			args{
 				`halfleft thisisthepie £ $ /
+	pie = 3 #
 	printthething £ ¬Hello  world!¬ $ #
 \`,
 			},
-			&[]token{
-				token{
-					Type: procedureDefine,
+			&[]Token{
+				Token{
+					Type: ProcedureDefine,
 				},
-				token{
-					Type:  name,
+				Token{
+					Type:  Name,
 					Value: getAdr("thisisthepie"),
 				},
-				token{
-					Type: paramOpen,
+				Token{
+					Type: ParamOpen,
 				},
-				token{
-					Type: paramClose,
+				Token{
+					Type: ParamClose,
 				},
-				token{
-					Type: bodyStart,
+				Token{
+					Type: BodyStart,
 				},
-				token{
-					Type:  name,
+				Token{
+					Type:  Name,
+					Value: getAdr("pie"),
+				},
+				Token{
+					Type: Assign,
+				},
+				Token{
+					Type:  Number,
+					Value: getAdr("3"),
+				},
+				Token{
+					Type: EndLine,
+				},
+				Token{
+					Type:  Name,
 					Value: getAdr("printthething"),
 				},
-				token{
-					Type: paramOpen,
+				Token{
+					Type: ParamOpen,
 				},
-				token{
-					Type:  stringConst,
+				Token{
+					Type:  StringConst,
 					Value: getAdr("Hello  world!"),
 				},
-				token{
-					Type: paramClose,
+				Token{
+					Type: ParamClose,
 				},
-				token{
-					Type: endLine,
+				Token{
+					Type: EndLine,
 				},
-				token{
-					Type: bodyEnd,
+				Token{
+					Type: BodyEnd,
 				},
 			},
 		},
@@ -76,73 +92,114 @@ func Test_tokenize(t *testing.T) {
 
 func Test_treeFromTokens(t *testing.T) {
 	type args struct {
-		tokens *[]token
+		tokens *[]Token
 	}
 	tests := []struct {
 		name string
 		args args
-		want functionCallTree
+		want FunctionCallTree
 	}{
 		{
 			"Initial Example",
 			args{
-				&[]token{
-					token{
-						Type: procedureDefine,
+				&[]Token{
+					Token{
+						Type: ProcedureDefine,
 					},
-					token{
-						Type:  name,
+					Token{
+						Type:  Name,
 						Value: getAdr("thisisthepie"),
 					},
-					token{
-						Type: paramOpen,
+					Token{
+						Type: ParamOpen,
 					},
-					token{
-						Type: paramClose,
+					Token{
+						Type: ParamClose,
 					},
-					token{
-						Type: bodyStart,
+					Token{
+						Type: BodyStart,
 					},
-					token{
-						Type:  name,
+					Token{
+						Type:  Name,
+						Value: getAdr("pie"),
+					},
+					Token{
+						Type: Assign,
+					},
+					Token{
+						Type:  Number,
+						Value: getAdr("3"),
+					},
+					Token{
+						Type: EndLine,
+					},
+					Token{
+						Type:  Name,
 						Value: getAdr("printthething"),
 					},
-					token{
-						Type: paramOpen,
+					Token{
+						Type: ParamOpen,
 					},
-					token{
-						Type:  stringConst,
+					Token{
+						Type:  StringConst,
 						Value: getAdr("Hello  world!"),
 					},
-					token{
-						Type: paramClose,
+					Token{
+						Type: ParamClose,
 					},
-					token{
-						Type: endLine,
+					Token{
+						Type: EndLine,
 					},
-					token{
-						Type: bodyEnd,
+					Token{
+						Type: BodyEnd,
 					},
 				},
 			},
-			functionCallTree{
-				definition: &functionDefinitionTree{
-					body: []functionCallTree{
-						functionCallTree{
-							definition: &functionDefinitionTree{
-								assembledBodyName: getAdr("printf"),
-								assembledBodyFile: getAdr(asmFiles.Printf),
-								parameters: []string{
+			FunctionCallTree{
+				Definition: &FunctionDefinitionTree{
+					Body: []FunctionCallTree{
+						FunctionCallTree{
+							Definition: &FunctionDefinitionTree{
+								AssembledBodyName: getAdr("setbytes"),
+								AssembledBodyFile: getAdr(asmFiles.Setbytes),
+								Parameters: []string{
+									"varName",
+									"value",
+									"valLength",
+								},
+							},
+							Parameters: map[string]FunctionCallTree{
+								"varName": FunctionCallTree{
+									EvalValue: []byte{0},
+								},
+								"value": FunctionCallTree{
+									EvalValue: []byte("3"),
+								},
+								"valLength": FunctionCallTree{
+									EvalValue: []byte{1},
+								},
+							},
+							ParamConstNames: map[string]string{
+								"varName":   "p0",
+								"value":     "p1",
+								"valLength": "p2",
+							},
+						},
+						FunctionCallTree{
+							Definition: &FunctionDefinitionTree{
+								AssembledBodyName: getAdr("printf"),
+								AssembledBodyFile: getAdr(asmFiles.Printf),
+								Parameters: []string{
 									"printString",
 								},
 							},
-							parameters: map[string]functionCallTree{
-								"printString": functionCallTree{
-									evalValue: append([]byte("Hello  world!"), 0),
+							Parameters: map[string]FunctionCallTree{
+								"printString": FunctionCallTree{
+									EvalValue: append([]byte("Hello  world!"), 0),
 								},
 							},
-							paramConstNames: map[string]string{
-								"printString": "p0",
+							ParamConstNames: map[string]string{
+								"printString": "p3",
 							},
 						},
 					},
@@ -154,7 +211,15 @@ func Test_treeFromTokens(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := treeFromTokens(tt.args.tokens)
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("treeFromTokens() = %v, want %v", got, tt.want)
+				gotStr, err := json.MarshalIndent(got, "", "	")
+				if err != nil {
+					panic(err)
+				}
+				wantStr, err := json.MarshalIndent(tt.want, "", "	")
+				if err != nil {
+					panic(err)
+				}
+				t.Errorf("treeFromTokens() = %s, want %s", string(gotStr), string(wantStr))
 			}
 		})
 	}
@@ -162,7 +227,7 @@ func Test_treeFromTokens(t *testing.T) {
 
 func Test_usedBuiltinFunctions(t *testing.T) {
 	type args struct {
-		tree functionCallTree
+		tree FunctionCallTree
 		used *[]string
 	}
 	tests := []struct {
@@ -173,24 +238,46 @@ func Test_usedBuiltinFunctions(t *testing.T) {
 		{
 			"Initial Examples",
 			args{
-				tree: functionCallTree{
-					definition: &functionDefinitionTree{
-						body: []functionCallTree{
-							functionCallTree{
-								definition: &functionDefinitionTree{
-									assembledBodyName: getAdr("printf"),
-									assembledBodyFile: getAdr(asmFiles.Printf),
-									parameters: []string{
+				tree: FunctionCallTree{
+					Definition: &FunctionDefinitionTree{
+						Body: []FunctionCallTree{
+							FunctionCallTree{
+								Definition: &FunctionDefinitionTree{
+									AssembledBodyName: getAdr("setbytes"),
+									AssembledBodyFile: getAdr(asmFiles.Setbytes),
+									Parameters: []string{
+										"varName",
+										"value",
+									},
+								},
+								Parameters: map[string]FunctionCallTree{
+									"varName": FunctionCallTree{
+										EvalValue: []byte("pie"),
+									},
+									"value": FunctionCallTree{
+										EvalValue: []byte("3"),
+									},
+								},
+								ParamConstNames: map[string]string{
+									"varName": "p0",
+									"value":   "p1",
+								},
+							},
+							FunctionCallTree{
+								Definition: &FunctionDefinitionTree{
+									AssembledBodyName: getAdr("printf"),
+									AssembledBodyFile: getAdr(asmFiles.Printf),
+									Parameters: []string{
 										"printString",
 									},
 								},
-								parameters: map[string]functionCallTree{
-									"printString": functionCallTree{
-										evalValue: []byte("Hello  world!"),
+								Parameters: map[string]FunctionCallTree{
+									"printString": FunctionCallTree{
+										EvalValue: append([]byte("Hello  world!"), 0),
 									},
 								},
-								paramConstNames: map[string]string{
-									"printString": "p0",
+								ParamConstNames: map[string]string{
+									"printString": "p2",
 								},
 							},
 						},
@@ -199,6 +286,7 @@ func Test_usedBuiltinFunctions(t *testing.T) {
 				used: &[]string{},
 			},
 			&[]string{
+				"setbytes",
 				"printf",
 			},
 		},
@@ -214,7 +302,7 @@ func Test_usedBuiltinFunctions(t *testing.T) {
 
 func Test_getAssemblyBodyFromTree(t *testing.T) {
 	type args struct {
-		tree functionCallTree
+		tree FunctionCallTree
 	}
 	tests := []struct {
 		name string
@@ -224,24 +312,46 @@ func Test_getAssemblyBodyFromTree(t *testing.T) {
 		{
 			"Initial Example",
 			args{
-				tree: functionCallTree{
-					definition: &functionDefinitionTree{
-						body: []functionCallTree{
-							functionCallTree{
-								definition: &functionDefinitionTree{
-									assembledBodyName: getAdr("printf"),
-									assembledBodyFile: getAdr(asmFiles.Printf),
-									parameters: []string{
+				tree: FunctionCallTree{
+					Definition: &FunctionDefinitionTree{
+						Body: []FunctionCallTree{
+							FunctionCallTree{
+								Definition: &FunctionDefinitionTree{
+									AssembledBodyName: getAdr("setbytes"),
+									AssembledBodyFile: getAdr(asmFiles.Setbytes),
+									Parameters: []string{
+										"varName",
+										"value",
+									},
+								},
+								Parameters: map[string]FunctionCallTree{
+									"varName": FunctionCallTree{
+										EvalValue: []byte("pie"),
+									},
+									"value": FunctionCallTree{
+										EvalValue: []byte("3"),
+									},
+								},
+								ParamConstNames: map[string]string{
+									"varName": "p0",
+									"value":   "p1",
+								},
+							},
+							FunctionCallTree{
+								Definition: &FunctionDefinitionTree{
+									AssembledBodyName: getAdr("printf"),
+									AssembledBodyFile: getAdr(asmFiles.Printf),
+									Parameters: []string{
 										"printString",
 									},
 								},
-								parameters: map[string]functionCallTree{
-									"printString": functionCallTree{
-										evalValue: []byte("Hello  world!"),
+								Parameters: map[string]FunctionCallTree{
+									"printString": FunctionCallTree{
+										EvalValue: append([]byte("Hello  world!"), 0),
 									},
 								},
-								paramConstNames: map[string]string{
-									"printString": "p0",
+								ParamConstNames: map[string]string{
+									"printString": "p2",
 								},
 							},
 						},
@@ -271,7 +381,7 @@ Invoke printf,$p0
 
 func Test_getAssemblyConstantsFromTree(t *testing.T) {
 	type args struct {
-		tree functionCallTree
+		tree FunctionCallTree
 	}
 	tests := []struct {
 		name string
@@ -281,23 +391,46 @@ func Test_getAssemblyConstantsFromTree(t *testing.T) {
 		{
 			"Initial Example",
 			args{
-				functionCallTree{
-					definition: &functionDefinitionTree{
-						body: []functionCallTree{
-							functionCallTree{
-								definition: &functionDefinitionTree{
-									assembledBodyFile: getAdr("printf"),
-									parameters: []string{
+				FunctionCallTree{
+					Definition: &FunctionDefinitionTree{
+						Body: []FunctionCallTree{
+							FunctionCallTree{
+								Definition: &FunctionDefinitionTree{
+									AssembledBodyName: getAdr("setbytes"),
+									AssembledBodyFile: getAdr(asmFiles.Setbytes),
+									Parameters: []string{
+										"varName",
+										"value",
+									},
+								},
+								Parameters: map[string]FunctionCallTree{
+									"varName": FunctionCallTree{
+										EvalValue: []byte("pie"),
+									},
+									"value": FunctionCallTree{
+										EvalValue: []byte("3"),
+									},
+								},
+								ParamConstNames: map[string]string{
+									"varName": "p0",
+									"value":   "p1",
+								},
+							},
+							FunctionCallTree{
+								Definition: &FunctionDefinitionTree{
+									AssembledBodyName: getAdr("printf"),
+									AssembledBodyFile: getAdr(asmFiles.Printf),
+									Parameters: []string{
 										"printString",
 									},
 								},
-								parameters: map[string]functionCallTree{
-									"printString": functionCallTree{
-										evalValue: append([]byte("Hello  world!"), 0),
+								Parameters: map[string]FunctionCallTree{
+									"printString": FunctionCallTree{
+										EvalValue: append([]byte("Hello  world!"), 0),
 									},
 								},
-								paramConstNames: map[string]string{
-									"printString": "p0",
+								ParamConstNames: map[string]string{
+									"printString": "p2",
 								},
 							},
 						},
@@ -305,7 +438,9 @@ func Test_getAssemblyConstantsFromTree(t *testing.T) {
 				},
 			},
 			map[string][]byte{
-				"p0": append([]byte("Hello  world!"), 0),
+				"p0": []byte("pie"),
+				"p1": []byte("3"),
+				"p2": append([]byte("Hello  world!"), 0),
 			},
 		},
 	}
@@ -331,6 +466,7 @@ func Test_cExternsFromAssemblyFiles(t *testing.T) {
 			"Initial Example",
 			args{
 				[]string{
+					"setbytes",
 					"printf",
 				},
 			},

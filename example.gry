@@ -1,4 +1,6 @@
 halfleft thisisthepie £ $ /
-	printthething £ ¬Hello  world!¬ $ #
+	olla = ¬Hello world  !¬ #
+	i = 1 #
+	printthething £ ¬Hello  world\n!¬ $ #
 	printthething £ ¬lol¬ $ #
 \
